@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 
 try:
-    import readline
+    import gnureadline as readline
 except ImportError:
-    import pyreadline as readline
+    try:
+        import readline
+    except ImportError:
+        import pyreadline as readline
 
 from attacks import *
 import urllib3
